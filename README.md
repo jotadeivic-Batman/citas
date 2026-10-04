@@ -1,140 +1,119 @@
-# Proyecto FCV — Sistema ficticio de agendamiento de citas
+# Comandos Docker — Proyecto FCV Citas
 
-Plantilla de trabajo para las sesiones **S2 a S6** de la formación de agentes de desarrollo. El paquete deja deliberadamente **vacíos de lógica de negocio** los repositorios `citas-api` y `citas-web`: el objetivo es que cada estudiante los construya con agentes, especificaciones, pruebas y automatización, manteniendo evidencia mediante Git.
+Guía rápida de comandos de Docker para iniciar, monitorear y gestionar todos los servicios de la aplicación.
 
-> **Importante:** el dominio es académico. Las sedes y algunos nombres de especialidades se apoyan en información pública de FCV; pacientes, profesionales, credenciales, EPS, planes, horarios y citas son datos sintéticos. No representa sistemas ni procesos internos reales de FCV.
+---
 
-## Estructura
+## 1. Iniciar los Contenedores
 
-```text
-FCV_Proyecto_Citas_v1/
-├── README.md
-├── PRD.md
-├── RESTRICCIONES_TECNICAS.md
-├── EVIDENCIAS_Y_TRAZABILIDAD.md
-├── docker-compose.yml
-├── .env.example
-├── database/
-├── prompts/
-├── skills/
-├── scripts/
-├── citas-api/       # Repo Git 1: Java/Spring Boot, inicialmente sin implementación
-└── citas-web/       # Repo Git 2: React o Angular, inicialmente sin implementación
+### Levantar la aplicación completa (crea e inicia contenedores):
+```bash
+docker compose up -d
 ```
 
-## Stack objetivo
+El arranque recomendado del proyecto actual en Windows es `./scripts/start-s2.ps1` desde PowerShell; el script conserva `.env` y el volumen, usa `MYSQL_DATABASE`, y el servicio de inicialización prepara el esquema antes de iniciar la API.
 
-### Backend
-- Java 21 LTS.
-- Spring Boot 3.5.x.
-- Maven.
-- Arquitectura hexagonal.
-- Spring Data JPA.
-- Flyway durante la implementación.
-- MySQL 8.4 LTS.
-- REST/JSON.
-- JWT access + refresh token.
-
-### Frontend
-El estudiante decide el framework al exportar/continuar desde Stitch y Google AI Studio:
-- React + TypeScript, **o**
-- Angular + TypeScript.
-
-Node.js 24 LTS es el runtime/toolchain. **No se usa Express ni BFF.** El frontend consume directamente `citas-api` por REST.
-
-## Dos repositorios, un workspace
-
-`citas-api` y `citas-web` son repositorios Git independientes. La carpeta raíz solo los orquesta y permite que Codex/Claude tengan visibilidad de ambos cuando el trabajo sea cross-repo.
-
-La única LLM Wiki global se versionará dentro de:
-
-```text
-citas-api/docs/wiki/llm-wiki/
-```
-
-## Skills incluidas
-
-En `skills/` se incluyen las dos Skills proporcionadas por el trainer:
-- `scrum-spec-orchestrator`: genera épicas, historias, tareas, criterios de aceptación y DoD en `docs/wiki/scrum/` sin implementar código.
-- `stitch-design-to-frontend`: guía prototipado, aprobación visual, handoff a Google AI Studio y reconciliación del frontend.
-
-## Flujo de desarrollo esperado
-
-```text
-PRD + restricciones
-      ↓
-scrum-spec-orchestrator
-      ↓
-Épicas + HU + CA + DoD
-      ↓
-Stitch → diseño aprobado → Google AI Studio
-      ↓
-citas-web
-      ↕ REST
-citas-api
-      ↓
-MySQL
-      ↓
-S3 verificación
-      ↓
-S4 autonomía / goals / loops
-      ↓
-S5-S6 MCP + n8n
-```
-
-## Inicio rápido de infraestructura
-
-1. Instala Docker Desktop y habilita WSL Integration.
-2. Desde esta carpeta:
-
+Si necesitas ejecutar el overlay S2 en Windows:
 ```powershell
-Copy-Item .env.example .env
-.\scripts\preflight.ps1
+.\scripts\start-s2.ps1
 ```
 
-3. Levanta únicamente MySQL:
-
-```powershell
-docker compose up -d mysql
+En Linux/macOS:
+```bash
+./scripts/start-s2.sh
 ```
 
-4. Comprueba:
+En cada `docker compose up -d`, `citas-db-ensure` espera a que MySQL esté saludable, crea el esquema configurado si falta y concede acceso al usuario de la aplicación antes de iniciar la API. Es idempotente y no elimina ni reinicializa volúmenes. El overlay S2 usa el mismo `MYSQL_DATABASE`, evitando apuntar a un esquema legado distinto.
 
+### Si los contenedores ya existen y solo están detenidos:
+```bash
+docker compose start
+```
+
+---
+
+## 2. Accesos Rápidos
+
+Una vez levantados los contenedores, accede a través de:
+
+- **Frontend (Web):** [http://localhost:5173](http://localhost:5173)
+- **Backend (API):** [http://localhost:8080](http://localhost:8080)
+- **Salud del Backend:** [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health)
+- **Base de Datos (MySQL):** `localhost:3307` (puerto interno: `3306`)
+
+---
+
+## 3. Revisar y Monitorear los Servicios
+
+### Instalar los hooks S3 (una vez, desde PowerShell):
 ```powershell
+.\scripts\install-hooks.ps1
+```
+
+Autoprueba del detector de secretos ficticios:
+```powershell
+node .\scripts\check-staged-secrets.mjs --self-test
+```
+
+### Ver el estado de los contenedores:
+```bash
 docker compose ps
-.\scripts\db-smoke-test.ps1
+```
+*Comprueba que los contenedores `fcv-citas-mysql`, `fcv-citas-api-dev` y `fcv-citas-web-dev` figuren como `Up` o `healthy`.*
+
+### Ver los logs en tiempo real (todos los servicios):
+```bash
+docker compose logs -f
 ```
 
-5. Si quieres disponer también de toolchains Java/Node dentro de contenedores:
+### Ver los logs de un servicio específico:
+```bash
+# Backend (Spring Boot)
+docker compose logs -f citas-api-dev
 
-```powershell
-docker compose --profile dev up -d
+# Frontend (React / Vite)
+docker compose logs -f citas-web-dev
+
+# Base de Datos (MySQL)
+docker compose logs -f mysql
 ```
 
-Estos contenedores **no contienen la aplicación**. Solo montan los repos vacíos y ofrecen Java/Maven y Node para que el estudiante inicialice sus proyectos.
+---
 
-## Inicializar Git
+## 4. Reiniciar y Detener Servicios
 
-```powershell
-.\scripts\init-repos.ps1
+### Reiniciar un servicio individual (útil si hay cambios o errores):
+```bash
+# Reiniciar backend
+docker compose restart citas-api-dev
+
+# Reiniciar frontend
+docker compose restart citas-web-dev
 ```
 
-El script crea en cada repo:
-- `main` como rama estable;
-- `develop` como rama de trabajo.
+### Detener los servicios sin borrarlos:
+```bash
+docker compose stop
+```
 
-La lógica se construye en `develop`. El estudiante fusiona a `main` cuando considere el incremento estable.
+### Bajar y remover los contenedores:
+```bash
+docker compose down
+```
 
-## Orden recomendado
+---
 
-1. Lee `PRD.md` y `RESTRICCIONES_TECNICAS.md`.
-2. Ejecuta `scrum-spec-orchestrator` desde `citas-api` para producir las épicas/HU/DoD.
-3. Ejecuta el prompt del agente orquestador desde la raíz.
-4. Genera los agentes de `citas-api` y `citas-web` con los prompts de `prompts/agents/`.
-5. Sigue `GUIA_SESIONES_S2_S6.md`.
-6. Usa `prompts/goal-loop/` en S2-S4.
-7. Versiona los JSON de n8n en `citas-api/automations/n8n/` durante S5-S6.
+## 5. Acceder a la Terminal de los Contenedores (Opcional)
 
-## Referencias de base de datos
+Si necesitas ejecutar comandos dentro de los contenedores:
 
-El paquete incluye la solución de referencia `database/reference/db.sql` y su ERD. Para la actividad de normalización, el trainer puede **ocultar temporalmente** esa carpeta y entregar únicamente `database/REQUISITOS_NORMALIZACION_3FN.md`.
+```bash
+# Entrar al backend
+docker compose exec -it citas-api-dev bash
+
+# Entrar al frontend
+docker compose exec -it citas-web-dev sh
+
+# Entrar a MySQL por terminal
+docker compose exec -it mysql mysql -uroot -p
+```

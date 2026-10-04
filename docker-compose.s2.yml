@@ -1,0 +1,15 @@
+# Local S2 overlay: reuse the schema selected by MYSQL_DATABASE.
+# Preserve the original .env and MySQL volume; do not reinitialize either.
+services:
+  citas-db-ensure:
+    environment:
+      DB_NAME: ${MYSQL_DATABASE}
+
+  citas-api-dev:
+    environment:
+      DB_NAME: ${MYSQL_DATABASE}
+      JWT_ACCESS_SECRET: ${S2_JWT_ACCESS_SECRET:?Run scripts/start-s2.ps1 first}
+      JWT_REFRESH_SECRET: ${S2_JWT_REFRESH_SECRET:?Run scripts/start-s2.ps1 first}
+    command: ["mvn", "-B", "-ntp", "spring-boot:run"]
+  citas-web-dev:
+    command: ["sh", "-c", "npm ci && npm run dev"]

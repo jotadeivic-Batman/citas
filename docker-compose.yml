@@ -18,6 +18,9 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
 
+    networks:
+      - citas-net
+
     healthcheck:
       test:
         [
@@ -28,6 +31,28 @@ services:
       timeout: 5s
       retries: 30
       start_period: 20s
+
+
+  citas-db-ensure:
+    image: mysql:8.4
+    restart: "no"
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+
+    volumes:
+      - ./scripts/ensure-db.sh:/usr/local/bin/ensure-db.sh:ro
+
+    networks:
+      - citas-net
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    entrypoint: ["sh", "/usr/local/bin/ensure-db.sh"]
 
 
   citas-api-dev:
@@ -54,14 +79,17 @@ services:
     ports:
       - "${API_PORT:-8080}:8080"
 
+    networks:
+      - citas-net
+
     depends_on:
-      mysql:
-        condition: service_healthy
+      citas-db-ensure:
+        condition: service_completed_successfully
 
     command:
       - bash
       - -lc
-      - tail -f /dev/null
+      - mvn -B -ntp spring-boot:run
 
 
   citas-web-dev:
@@ -79,14 +107,22 @@ services:
       - "${REACT_PORT:-5173}:5173"
       - "${ANGULAR_PORT:-4200}:4200"
 
+    networks:
+      - citas-net
+
     depends_on:
       - citas-api-dev
 
     command:
       - sh
       - -lc
-      - tail -f /dev/null
+      - npm run dev -- --host 0.0.0.0
 
+
+networks:
+  citas-net:
+    driver: bridge
+    name: citas-network
 
 volumes:
   mysql_data:

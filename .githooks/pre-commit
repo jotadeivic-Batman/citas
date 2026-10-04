@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+
+HOOK_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+WORKSPACE_ROOT=$(dirname "$HOOK_DIR")
+REPO_ROOT=$(git rev-parse --show-toplevel)
+REPO_NAME=$(basename "$REPO_ROOT")
+
+if command -v node >/dev/null 2>&1; then
+  node "$WORKSPACE_ROOT/scripts/check-staged-secrets.mjs"
+else
+  echo "[pre-commit] Node.js no encontrado en PATH; saltando escaneo JS de secretos."
+fi
+
+cd "$WORKSPACE_ROOT"
+if command -v docker >/dev/null 2>&1; then
+  case "$REPO_NAME" in
+    citas-api)
+      docker compose --project-directory "$WORKSPACE_ROOT" --file "$WORKSPACE_ROOT/docker-compose.yml" \
+        exec -T citas-api-dev mvn -B -ntp verify
+      ;;
+    citas-web)
+      docker compose --project-directory "$WORKSPACE_ROOT" --file "$WORKSPACE_ROOT/docker-compose.yml" \
+        exec -T citas-web-dev npm run build
+      ;;
+    *)
+      echo "Unsupported repository for FCV pre-commit: $REPO_NAME" >&2
+      exit 2
+      ;;
+  esac
+else
+  echo "[pre-commit] Docker no encontrado en PATH; se confía en verificación de compilación previa."
+fi
